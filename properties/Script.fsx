@@ -1,5 +1,6 @@
-﻿#load "Component1.fs"
-// Learn more about F# at http://fsharp.org. See the 'F# Tutorial' project
-// for more guidance on F# programming.
+﻿#r "bin/Debug/FsCheck.dll"
+#r "bin/Debug/properties.dll"
 
-open properties
+open Properties.Examples
+open FsCheck
+open FsCheck.Util
