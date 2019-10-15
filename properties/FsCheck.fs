@@ -116,6 +116,22 @@ module Util =
                     gen { return vs |> List.rev |> Array.ofList }
             loop 0 []
 
+        let list (a: Gen<'a>) =
+          Gen.sized (fun n -> gen {
+                                  let! k = Gen.choose (0, n)
+                                  return! Gen.sequence (seq { for _ in 1 .. k -> a })
+                              })
+
+        // argl, map is taken ...
+
+        let mapOf (key: Gen<'key>) (value: Gen<'value>): Gen<Map<'key, 'value>> =
+          gen {
+            let! keys = list key
+            let keySet = Set.ofList keys
+            let! values = array (Set.count keySet) value
+            return Map.ofList (List.zip (Set.toList keySet) (List.ofArray values))                  
+          }
+
         let optional (g: Gen<'a>): Gen<option<'a>> =
             Gen.frequency [(9, g |> Gen.map Some);(1, gen {return None})]
 
@@ -135,6 +151,25 @@ module Util =
         let letterString: Arbitrary<string> =
             let shrink s = Arb.shrink s
             Arb.fromGenShrink (Gen.letterString, shrink)
+
+        let int = Arb.Default.Int32 ()
+
+        let nonNegativeInt =
+          let nnarb = Arb.Default.NonNegativeInt ()
+          let convertFrom n = NonNegativeInt (abs n)
+          let convertTo (NonNegativeInt n) = n
+          Arb.convert convertTo convertFrom nnarb
+
+        let choose low high =
+          let convertTo n = (n % (high - low + 1)) + low
+          let convertFrom n = n - low
+          Arb.convert convertTo convertFrom nonNegativeInt
+
+        let positiveInt =
+          let nnarb = Arb.Default.PositiveInt ()
+          let convertFrom n = PositiveInt (abs n)
+          let convertTo (PositiveInt n) = n
+          Arb.convert convertTo convertFrom nnarb
 
         /// arbitrary bytes array
         let bytes = Arb.from<byte[]>
@@ -234,12 +269,8 @@ module Util =
 
         /// make an arbitrary for lists from an arbitrary for the list elements
         let list (a: Arbitrary<'a>): Arbitrary<list<'a>> =
-            let generator = Gen.sized (fun n -> gen {
-                                                    let! k = Gen.choose (0, n)
-                                                    return! Gen.sequence (seq { for _ in 1 .. k -> a.Generator })
-                                                })
-            let shrink xs = shrinkList a.Shrinker xs
-            Arb.fromGenShrink (generator, shrink)
+          let shrink xs = shrinkList a.Shrinker xs
+          Arb.fromGenShrink (Gen.list a.Generator, shrink)
             
         let array (size: int) (a: Arbitrary<'a>): Arbitrary<'a[]> =
             Arb.fromGen (Gen.array size a.Generator)
@@ -251,6 +282,16 @@ module Util =
             // questionable ...
             let shrink s = Set.toList s |> larb.Shrinker |> Seq.map Set.ofList
             Arb.fromGenShrink (generator, shrink)
+
+        let shrinkMap (key: Arbitrary<'key>) (value: Arbitrary<'value>) =
+          let pairShrinker = (pair key value).Shrinker
+          fun map ->
+            let lis = Map.toList map
+            let shrunkList = shrinkList (pairShrinker) lis
+            Seq.map Map.ofList shrunkList
+
+        let map (key: Arbitrary<'key>) (value: Arbitrary<'value>): Arbitrary<Map<'key, 'value>> =
+          Arb.fromGenShrink (Gen.mapOf key.Generator value.Generator, shrinkMap key value)
 
         let choiceOf2 (a1: Arbitrary<'a>) (a2: Arbitrary<'b>): Arbitrary<Choice<'a, 'b>> =
             let generator = Gen.oneof [a1.Generator |> Gen.map Choice1Of2; a2.Generator |> Gen.map Choice2Of2]
