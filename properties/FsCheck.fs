@@ -315,10 +315,10 @@ module Util =
             Arb.fromGenShrink (generator, shrink)
 
         /// arbitrary that picks one element randomly
-        let pickOneOf (els:'a []) =
+        let pickOneOf (els: seq<'a>) =
             let generator = gen {
-                    let! idx = Gen.choose(0, els.Length-1)
-                    return els.[idx]
+                    let! idx = Gen.choose(0, (Seq.length els)-1)
+                    return Seq.item idx els
                 }
             Arb.fromGen generator
 

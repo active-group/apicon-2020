@@ -13,7 +13,7 @@ module Test =
 
     // First version: gets caught out by addingItemIncreasesTotal
     let discount' =
-      let arbN = Arb.choose 1 5
+      let arbN = Arb.choose 1 20
       let convertTo (receive, payFor) = { receive = receive; payFor = payFor }
       let convertFrom discount = (discount.receive, discount.payFor)
       let valid (receive, payFor) = payFor < receive
@@ -22,19 +22,11 @@ module Test =
     let discount =
       let convertTo receive = { receive = receive; payFor = receive-1 }
       let convertFrom discount = discount.receive
-      Arb.convert convertTo convertFrom (Arb.choose 2 5)
-
-    let partialMap key value =
-        let convertTo map =
-            Map.map (fun key value -> Option.get value) 
-                    (Map.filter (fun _ value -> Option.isSome value) map)
-        let convertFrom map =
-            Map.map (fun key value -> Some value) map
-        in Arb.convert convertTo convertFrom (Arb.map key (Arb.optional value))
+      Arb.convert convertTo convertFrom (Arb.choose 2 20)
 
     let discounts prices =
       let items = Seq.map fst (Map.toSeq prices)
-      partialMap (Arb.pickOneOf (Seq.toArray items)) discount
+      Arb.map (Arb.pickOneOf items) discount
 
     let priceAndDiscounts =
       let gen = gen {
@@ -42,11 +34,11 @@ module Test =
            let! discounts = Arb.toGen (discounts prices)
            return (prices, discounts)
           }
-      in Arb.fromGen gen // FIXME: missing a shrinker
+      in Arb.fromGen gen
 
     let countAndItem prices =
       let items = Seq.map fst (Map.toSeq prices)
-      Arb.pair (Arb.choose 1 50) (Arb.pickOneOf (Seq.toArray items)) // int before 
+      Arb.pair (Arb.choose 1 50) (Arb.pickOneOf items) // int before 
 
     let countAndItems prices = Arb.list (countAndItem prices)
 
@@ -58,8 +50,9 @@ module Test =
 
   let (.=.) left right = left = right |@ sprintf "%A = %A" left right
   let (.>=.) left right = left >= right |@ sprintf "%A >= %A" left right
+  let (.>.) left right = left > right |@ sprintf "%A >= %A" left right
 
-  let total0Correct create =
+  let total0Correct (create: Map<Item, Price> -> Interface) =
     Prop.forAll Arb.prices (fun prices ->
       let cart = create prices
       Interface.totalCount cart = 0)
@@ -87,8 +80,8 @@ module Test =
       let cart = create prices
       Interface.add cart 1 (fst itemPrice)
       Interface.total cart .=. snd itemPrice)
-
-  let addingItemIncreasesTotal create =
+      
+  let addingItemIncreasesTotal (create: Map<Item, Price> -> Map<Item, Discount> -> Interface) =
     Prop.forAll Arb.prices (fun prices ->
       Prop.forAll (Arb.discounts prices) (fun discounts ->
         Prop.forAll (Arb.countAndItems prices) (fun countAndItems ->
@@ -96,9 +89,9 @@ module Test =
           List.iter (fun (count, item) -> Interface.add cart count item) countAndItems
           let itemPrice = Seq.head (Map.toSeq prices)
           let totalBefore = Interface.total cart
-          Interface.add cart 1 (fst itemPrice)
+          Interface.add cart 2 (fst itemPrice)
           let totalAfter = Interface.total cart
-          totalAfter .>=. totalBefore))) // 2 for 1 might keep price the same
+          totalAfter .>. totalBefore))) // 2 for 1 might keep price the same
 
   // TODO: common DI for w/ and w/o discounts
   // model-based testing
@@ -124,7 +117,6 @@ module Test =
            Price.scale (((count / receive) * payFor) + count % receive) price
         else Price.scale count price
 
-
   let total { prices = prices; discounts = discounts; cart = cart } =
     let folder total item count =
       let price = Map.find item prices
@@ -134,9 +126,8 @@ module Test =
 
   let totalCount { prices = prices; discounts = discounts; cart = cart } =
     let folder total item count = total + count
-    Map.fold folder 0 cart
-
-
+    // Map.fold folder 0 cart
+    Seq.sum (Seq.map snd (Map.toSeq cart))
 
   let cartMachine create =
     let add (count, item) =

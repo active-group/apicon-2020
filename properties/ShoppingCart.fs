@@ -46,7 +46,7 @@ module Implementation =
          Map.fold folder 0 !cart
    }
 
- // caught out by itemCountCorrect
+ // ignores count, caught out by itemCountCorrect
  let create2 (prices: Map<Item, Price>) =
    let cart = ref Map.empty<Item, int>
    let itemCount item =
@@ -110,8 +110,8 @@ module Implementation =
          let folder total item count = total + count
          Map.fold folder 0 !cart
    }
-   
- // catches out int in itemCountCorrect: need a model!
+
+ // no negative counts; catches out int in itemCountCorrect: need a model!
  let create5 (prices: Map<Item, Price>) =
    let cart = ref Map.empty<Item, int>
    let itemCount item =
@@ -132,7 +132,7 @@ module Implementation =
          Map.fold folder 0 !cart
    }
 
-
+ // ignores count when there's a discount
  let create6 (prices: Map<Item, Price>) (discounts: Map<Item, Discount>) =
    let cart = ref Map.empty<Item, int>
    let itemCount item =
@@ -163,6 +163,7 @@ module Implementation =
          Map.fold folder 0 !cart
    }
 
+ // leaves out remainder when calculating discount
  let create7 (prices: Map<Item, Price>) (discounts: Map<Item, Discount>) =
    let cart = ref Map.empty<Item, int>
    let itemCount item =
@@ -194,6 +195,7 @@ module Implementation =
          Map.fold folder 0 !cart
    }
 
+ // OK
  let create8 (prices: Map<Item, Price>) (discounts: Map<Item, Discount>) =
    let cart = ref Map.empty<Item, int>
    let itemCount item =
