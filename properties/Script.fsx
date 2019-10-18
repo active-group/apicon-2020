@@ -3,6 +3,8 @@
 
 open Properties
 open Properties.Examples
+open Properties.ISet
+open Properties.ISet.Test
 open FsCheck
 open FsCheck.Util
 open FsCheck.Experimental
