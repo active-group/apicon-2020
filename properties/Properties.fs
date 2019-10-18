@@ -4,27 +4,35 @@ module Examples =
     open FsCheck
     open FsCheck.Util
 
-    let Listrev xs =
+    let rev xs =
+      let rec loop xs res =
+        match xs  with
+        | [] -> res
+        | x::xs' -> loop xs' (x::res)
+      loop xs []
+
+    let bugrev xs =
         match xs with
-        | 1::xs' -> List.rev xs'
-        | _ -> List.rev xs
+        | 1::xs' -> rev xs'
+        | _ -> rev xs
 
     let revRevIsOrig =
       Prop.forAll (Arb.list Arb.int) (fun xs ->
-        List.rev (List.rev xs) = xs)
+        bugrev (bugrev xs) = xs)
 
     let revOne =
       Prop.forAll Arb.int (fun x ->
-        List.rev [x] = [x])
+        rev [x] = [x])
 
     let revAppend =
       Prop.forAll (Arb.pair (Arb.list Arb.int) (Arb.list Arb.int))
         (fun (xs1, xs2) ->
-          (List.append (List.rev xs1) (List.rev xs2)) = List.rev (List.append xs2 xs1))
+          (List.append (rev xs1) (rev xs2)) = rev (List.append xs2 xs1))
 
+
+type ISet = list<int * int>
 
 module ISet =
-  type ISet = list<int * int>
 
   let rec isValid s =
     match s with
@@ -70,11 +78,26 @@ module ISet =
 
     let iset =
       let gen =
-        gen {
-            let! lis = Arb.toGen (Arb.list (Arb.pair Arb.nonNegativeInt Arb.nonNegativeInt))
-            return dropOverlaps (List.sortBy fst (List.map (fun (a, b) -> (min a b, max a b)) lis))
-        }
-      in Arb.fromGen gen
+            Gen.map 
+              (fun lis -> dropOverlaps 
+                           (List.sortBy fst
+                             (List.map (fun (a, b) -> (min a b, max a b)) lis)))
+              (Arb.toGen (Arb.list (Arb.pair Arb.nonNegativeInt Arb.nonNegativeInt)))
+      let shrink = Arb.shrinkList (fun _ -> Seq.empty)
+      Arb.fromGenShrink (gen, shrink)
+
+  let rec union s1 s2 =
+    match (s1, s2) with
+    | ([], s2) -> s2
+    | (s1, []) -> s1
+    | ((lo1, hi1)::s1', (lo2, hi2)::s2') ->
+      if lo1 > hi2 + 1
+      then (lo2, hi2)::(union s1 s2')
+      elif lo2 > hi1 + 1
+      then (lo1, hi1)::(union s1' s2)
+      elif hi1 >= hi2
+      then union ((min lo1 lo2, hi1)::s1') s2'
+      else union s1' ((min lo1 lo2, hi2)::s2')
 
 
   module Test =
@@ -83,17 +106,20 @@ module ISet =
 
     let (.=.) left right = left = right |@ sprintf "%A = %A" left right
 
-    let unionCorrect union =
+    let generatorValid =
+      Prop.forAll Arb.iset (fun s -> isValid s)
+
+    let unionCorrect =
       Prop.forAll (Arb.pair Arb.iset Arb.iset) (fun (s1, s2) ->
         toList (union s1 s2)
         .=.
         merge2 (toList s1) (toList s2))
 
-    let unionValid union =
+    let unionValid =
       Prop.forAll (Arb.pair Arb.iset Arb.iset) (fun (s1, s2) ->
         isValid (union s1 s2))
 
-
+(*
   let union1 [] [] = []
 
   let union2 [] s = s
@@ -169,3 +195,6 @@ module ISet =
       then union9 ((min lo1 lo2, hi1) :: s1) s2
       // if hi2 >= hi1
       else  union9 s1 ((min lo1 lo2, hi2) :: s2)
+
+
+      *)
