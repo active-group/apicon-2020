@@ -143,6 +143,9 @@ module Util =
             |> Gen.map stringOfList
 
     module Arb =
+        let sample arb =
+            Gen.sample 20 5 (Arb.toGen arb)
+
         /// arbitrary non-null string
         let string =
             let shrink s = Arb.shrink s
