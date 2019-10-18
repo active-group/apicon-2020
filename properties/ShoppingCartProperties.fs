@@ -50,17 +50,17 @@ module Test =
 
   let (.=.) left right = left = right |@ sprintf "%A = %A" left right
   let (.>=.) left right = left >= right |@ sprintf "%A >= %A" left right
-  let (.>.) left right = left > right |@ sprintf "%A >= %A" left right
+  let (.>.) left right = left > right |@ sprintf "%A > %A" left right
 
   let total0Correct (create: Map<Item, Price> -> Interface) =
     Prop.forAll Arb.prices (fun prices ->
       let cart = create prices
-      Interface.totalCount cart = 0)
+      Interface.totalCount cart .=. 0)
    
   let totalCountCorrect create =
-    Prop.forAll (Arb.filter Arb.mapIsNonEmpty (Arb.map Arb.item Arb.price)) (fun prices ->
+    Prop.forAll Arb.prices (fun prices ->
       let items = List.map fst (Map.toList prices)
-      Prop.forAll (Arb.list (Arb.pickOneOf (List.toArray items))) (fun items ->
+      Prop.forAll (Arb.list (Arb.pickOneOf items)) (fun items ->
         let cart = create prices
         List.iter (Interface.add cart 1) items
         cart.TotalCount () .=. List.length items))
@@ -89,11 +89,10 @@ module Test =
           List.iter (fun (count, item) -> Interface.add cart count item) countAndItems
           let itemPrice = Seq.head (Map.toSeq prices)
           let totalBefore = Interface.total cart
-          Interface.add cart 2 (fst itemPrice)
+          Interface.add cart 2 (fst itemPrice)  // start with 1
           let totalAfter = Interface.total cart
           totalAfter .>. totalBefore))) // 2 for 1 might keep price the same
 
-  // TODO: common DI for w/ and w/o discounts
   // model-based testing
   open FsCheck.Experimental
 
@@ -108,13 +107,16 @@ module Test =
       | None -> 0
       | Some count -> count
 
+  let add model count item =
+    { model with
+        cart = Map.add item (itemCount model.cart item + count) model.cart }
+
   let calculatePrice (price: Price) (count: int) (discount: Option<Discount>): Price =
     match discount with
     | None -> Price.scale count price
     | Some { receive = receive; payFor = payFor } ->
         if count >= receive
-        then 
-           Price.scale (((count / receive) * payFor) + count % receive) price
+        then Price.scale (((count / receive) * payFor) + count % receive) price
         else Price.scale count price
 
   let total { prices = prices; discounts = discounts; cart = cart } =
@@ -124,17 +126,14 @@ module Test =
       Price.add total (calculatePrice price count optionalDiscount)
     Map.fold folder Price.nothing cart 
 
-  let totalCount { prices = prices; discounts = discounts; cart = cart } =
-    let folder total item count = total + count
-    // Map.fold folder 0 cart
-    Seq.sum (Seq.map snd (Map.toSeq cart))
+  let totalCount model =
+    Seq.sum (Seq.map snd (Map.toSeq model.cart))
 
-  let cartMachine create =
+  let cartMachine (create: Map<Item, Price> -> Map<Item, Discount> -> Interface) =
     let add (count, item) =
       { new Operation<Interface, Model>() with
           override __.Run model =
-              { model with
-                  cart = Map.add item (itemCount model.cart item + count) model.cart }
+              add model count item
           override __.Check (sut, model) =
               Interface.add sut count item
               ((Interface.totalCount sut .=. totalCount model) %> "totalCount")
@@ -149,9 +148,13 @@ module Test =
       }
     { new Machine<Interface, Model> () with
         override __.Setup =
-            Arb.priceAndDiscounts |> Arb.toGen |> Gen.map create |> Arb.fromGen
+          let convertFrom (setup: Setup<Interface, Model>) = 
+            let model = setup.Model ()
+            (model.prices, model.discounts)
+          let convertTo (prices, discounts) = create (prices, discounts)
+          Arb.convert convertTo convertFrom Arb.priceAndDiscounts
         override __.Next model =
-            Gen.map add (Arb.toGen (Arb.countAndItem model.prices))
+          Gen.map add (Arb.toGen (Arb.countAndItem model.prices))
           
     }
 
