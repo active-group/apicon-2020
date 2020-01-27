@@ -2,3 +2,6 @@
 /packages
 /properties/obj
 *~
+/.ionide
+/paket-files
+/properties/bin
