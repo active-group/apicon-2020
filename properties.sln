@@ -17,7 +17,7 @@ Global
 	GlobalSection(MonoDevelopProperties) = preSolution
 		Policies = $0
 		$0.TextStylePolicy = $1
-		$1.TabWidth = 8
+		$1.TabWidth = 2
 		$1.TabsToSpaces = True
 		$1.IndentWidth = 2
 		$1.NoTabsAfterNonTabs = True
